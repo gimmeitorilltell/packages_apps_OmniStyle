@@ -78,3 +78,11 @@ creator text will be displayed in BrowseHeaderActivity
 
 ```
 Label will be the name your pack will appear when selecting
+
+## Contributors ##
++ Aaron Wieneke
+
+TODO
+-----
+Show pack properties like type (random, list, time context) and change interval
+when selecting

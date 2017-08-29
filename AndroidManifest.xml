@@ -27,11 +27,31 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
     <application
         android:allowBackup="false"
-        android:label="OmniStyle"
-        android:icon="@drawable/omnirom_logo" >
+        android:label="OmniStyle" >
         <activity
             android:name=".BrowseHeaderActivity"
             android:label="@string/browse_header"
+            android:theme="@android:style/Theme.Material.Settings" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity
+
+            android:name=".PickHeaderActivity"
+            android:label="@string/pick_header"
+            android:theme="@android:style/Theme.Material.Settings" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".BrowseCandyHeaderActivity"
+            android:label="@string/browse_candy_header"
             android:theme="@android:style/Theme.Material.Settings" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -82,6 +102,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
         <activity
             android:name=".wavvy"
             android:label="Wavvy" >
+            <intent-filter>
+                <action android:name="org.omnirom.DaylightHeaderPack1" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".candy"
+            android:label="Candy" >
             <intent-filter>
                 <action android:name="org.omnirom.DaylightHeaderPack1" />
 
