@@ -24,13 +24,16 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
+import android.content.res.XmlResourceParser;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.MenuItem;
 import android.view.View;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -41,19 +44,22 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import org.omnirom.omnistyle.HeaderUtils.DaylightHeaderInfo;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
+import org.xmlpull.v1.XmlPullParserFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.Collections;
 
 public class BrowseHeaderActivity extends Activity {
     private static final String TAG = "BrowseHeaderActivity";
     private static final String DEFAULT_HEADER_PACKAGE = "com.android.systemui";
     private static final String STATUS_BAR_CUSTOM_HEADER_IMAGE = "status_bar_custom_header_image";
-    private static final String STATUS_BAR_CUSTOM_HEADER_PROVIDER = "status_bar_custom_header_provider";
 
     private static final boolean DEBUG = true;
     private List<DaylightHeaderInfo> mHeadersList;
@@ -69,14 +75,21 @@ public class BrowseHeaderActivity extends Activity {
     private TextView mCreatorName;
     private String mCreatorLabel;
     private String mCreator;
-    protected boolean mPickerMode;
+
+    private class DaylightHeaderInfo {
+        public int mType = 0;
+        public int mHour = -1;
+        public int mDay = -1;
+        public int mMonth = -1;
+        public String mImage;
+    }
 
     public class HeaderListAdapter extends ArrayAdapter<DaylightHeaderInfo> {
         private final LayoutInflater mInflater;
 
         public HeaderListAdapter(Context context) {
             super(context, R.layout.header_image, mHeadersList);
-            mInflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+            mInflater = (LayoutInflater)context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         }
 
         @Override
@@ -84,13 +97,8 @@ public class BrowseHeaderActivity extends Activity {
             HeaderImageHolder holder = HeaderImageHolder.createOrRecycle(mInflater, convertView);
             convertView = holder.rootView;
             DaylightHeaderInfo di = mHeadersList.get(position);
-            int resId = mRes.getIdentifier(di.mImage, "drawable", mPackageName);
-            if (resId != 0) {
-                holder.mHeaderImage.setImageDrawable(mRes.getDrawable(resId, null));
-            } else {
-                holder.mHeaderImage.setImageDrawable(null);
-            }
-            holder.mHeaderName.setText(di.mName != null ? di.mName : di.mImage);
+            holder.mHeaderImage.setImageDrawable(mRes.getDrawable(mRes.getIdentifier(di.mImage, "drawable", mPackageName), null));
+            holder.mHeaderName.setText(di.mImage);
             return convertView;
         }
     }
@@ -112,7 +120,7 @@ public class BrowseHeaderActivity extends Activity {
             } else {
                 // Get the ViewHolder back to get fast access to the TextView
                 // and the ImageView.
-                return (HeaderImageHolder) convertView.getTag();
+                return (HeaderImageHolder)convertView.getTag();
             }
         }
     }
@@ -122,7 +130,7 @@ public class BrowseHeaderActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.content_browse);
 
-        getActionBar().setDisplayOptions(ActionBar.DISPLAY_HOME_AS_UP | ActionBar.DISPLAY_SHOW_TITLE);
+        getActionBar().setDisplayOptions(ActionBar.DISPLAY_HOME_AS_UP|ActionBar.DISPLAY_SHOW_TITLE);
 
         mProgress = (ProgressBar) findViewById(R.id.browse_progress);
         mHeaderSelect = (Spinner) findViewById(R.id.package_select);
@@ -153,17 +161,16 @@ public class BrowseHeaderActivity extends Activity {
 
         mHeadersList = new ArrayList<DaylightHeaderInfo>();
         mHeaderListView = (ListView) findViewById(R.id.package_images);
-        if (mPickerMode) {
-            mHeaderListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-                @Override
-                public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                    DaylightHeaderInfo di = mHeadersList.get(i);
-                    Settings.System.putString(getContentResolver(), STATUS_BAR_CUSTOM_HEADER_IMAGE, mPackageName + "/" + di.mImage);
-                    Settings.System.putString(getContentResolver(), STATUS_BAR_CUSTOM_HEADER_PROVIDER, "static");
-                    Toast.makeText(BrowseHeaderActivity.this, R.string.custom_header_image_notice, Toast.LENGTH_LONG).show();
-                }
-            });
-        }
+        mHeaderListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            @Override
+            public boolean onItemLongClick(AdapterView<?> adapterView, View view, int i, long l) {
+                DaylightHeaderInfo di = mHeadersList.get(i);
+                Settings.System.putString(getContentResolver(), STATUS_BAR_CUSTOM_HEADER_IMAGE, mPackageName + "/" + di.mImage);
+                Toast.makeText(BrowseHeaderActivity.this, R.string.custom_header_image_notice, Toast.LENGTH_LONG).show();
+                finish();
+                return true;
+            }
+        });
         mHeaderListAdapter = new HeaderListAdapter(this);
         mHeaderListView.setAdapter(mHeaderListAdapter);
         loadHeaderPackage(mHeaderMap.get(mLabelList.get(0)));
@@ -202,7 +209,7 @@ public class BrowseHeaderActivity extends Activity {
             if (label == null) {
                 label = packageName;
             }
-            headerMap.put(label, packageName + "/" + r.activityInfo.name);
+            headerMap.put(label, packageName  + "/" + r.activityInfo.name);
         }
         mLabelList.addAll(headerMap.keySet());
         Collections.sort(mLabelList);
@@ -227,11 +234,108 @@ public class BrowseHeaderActivity extends Activity {
         try {
             PackageManager packageManager = getPackageManager();
             mRes = packageManager.getResourcesForApplication(mPackageName);
-            mCreator = HeaderUtils.loadHeaders(mRes, mHeaderName, mHeadersList);
+            loadHeaders();
         } catch (Exception e) {
-            Log.e(TAG, "Failed to load header pack " + mHeaderName, e);
+            Log.e(TAG, "Failed to load icon pack " + mHeaderName, e);
             mRes = null;
         }
         mProgress.setVisibility(View.GONE);
+    }
+
+    private void loadHeaders() throws XmlPullParserException, IOException {
+        mHeadersList.clear();
+        mCreator = null;
+        InputStream in = null;
+        XmlPullParser parser = null;
+
+        try {
+            if (mHeaderName == null) {
+                if (DEBUG) Log.i(TAG, "Load header pack config daylight_header.xml");
+                in = mRes.getAssets().open("daylight_header.xml");
+            } else {
+                int idx = mHeaderName.lastIndexOf(".");
+                String headerConfigFile = mHeaderName.substring(idx + 1) + ".xml";
+                if (DEBUG) Log.i(TAG, "Load header pack config " + headerConfigFile);
+                in = mRes.getAssets().open(headerConfigFile);
+            }
+            XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
+            parser = factory.newPullParser();
+            parser.setInput(in, "UTF-8");
+            loadResourcesFromXmlParser(parser);
+        } finally {
+            // Cleanup resources
+            if (parser instanceof XmlResourceParser) {
+                ((XmlResourceParser) parser).close();
+            }
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException e) {
+                }
+            }
+        }
+    }
+
+    private void loadResourcesFromXmlParser(XmlPullParser parser) throws XmlPullParserException, IOException {
+        int eventType = parser.getEventType();
+        do {
+            if (eventType != XmlPullParser.START_TAG) {
+                continue;
+            }
+            String name = parser.getName();
+            if (name.equalsIgnoreCase("day_header")) {
+                DaylightHeaderInfo headerInfo = new DaylightHeaderInfo();
+                headerInfo.mType = 0;
+                String day = parser.getAttributeValue(null, "day");
+                if (day != null) {
+                    headerInfo.mDay = Integer.valueOf(day);
+                }
+                String month = parser.getAttributeValue(null, "month");
+                if (month != null) {
+                    headerInfo.mMonth = Integer.valueOf(month);
+                }
+                String image = parser.getAttributeValue(null, "image");
+                if (image != null) {
+                    headerInfo.mImage = image;
+                }
+                if (headerInfo.mImage != null && headerInfo.mDay != -1 && headerInfo.mMonth != -1) {
+                    mHeadersList.add(headerInfo);
+                }
+            } else if (name.equalsIgnoreCase("hour_header")) {
+                DaylightHeaderInfo headerInfo = new DaylightHeaderInfo();
+                headerInfo.mType = 1;
+                String hour = parser.getAttributeValue(null, "hour");
+                if (hour != null) {
+                    headerInfo.mHour = Integer.valueOf(hour);
+                }
+                String image = parser.getAttributeValue(null, "image");
+                if (image != null) {
+                    headerInfo.mImage = image;
+                }
+                if (headerInfo.mImage != null && headerInfo.mHour != -1) {
+                    mHeadersList.add(headerInfo);
+                }
+            } else if (name.equalsIgnoreCase("random_header") ||
+                    name.equalsIgnoreCase("list_header")) {
+                DaylightHeaderInfo headerInfo = new DaylightHeaderInfo();
+                headerInfo.mType = 2;
+                String image = parser.getAttributeValue(null, "image");
+                if (image != null) {
+                    headerInfo.mImage = image;
+                }
+                if (headerInfo.mImage != null) {
+                    mHeadersList.add(headerInfo);
+                }
+            } else if (name.equalsIgnoreCase("meta_data")) {
+                mCreator = parser.getAttributeValue(null, "creator");
+                if (DEBUG) Log.i(TAG, "creator = " + mCreator);
+            }
+        } while ((eventType = parser.next()) != XmlPullParser.END_DOCUMENT);
+        if (DEBUG) Log.i(TAG, "loaded size = " + mHeadersList.size());
+    }
+
+    private Drawable getHeaderImage(int index) {
+        DaylightHeaderInfo di = mHeadersList.get(index);
+        return mRes.getDrawable(mRes.getIdentifier(di.mImage, "drawable", mPackageName), null);
     }
 }
